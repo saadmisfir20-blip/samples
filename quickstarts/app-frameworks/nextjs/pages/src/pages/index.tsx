@@ -1,99 +1,111 @@
-import { useState } from 'react';
-import { streamFlow } from 'genkit/beta/client';
-import type {
-  BargainChefInput,
-  PartialRecipe,
-  Recipe,
-} from '../genkit/bargainChefFlow';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { WebView } from 'react-native-webview';
+import { WifiOff } from 'lucide-react-native';
+import { COLORS, FONTS, SPACING } from '@/constants/theme';
 
-export default function Home() {
-  const [craving, setCraving] = useState('something warm with chicken');
-  const [recipe, setRecipe] = useState<PartialRecipe | null>(null);
-  const [isStreaming, setIsStreaming] = useState(false);
+const SITE_URL = 'https://ibn-masfar-building-6lax.bolt.host/';
 
-  async function generateRecipe(event: React.FormEvent) {
-    event.preventDefault();
-    if (!craving.trim()) return;
-    setRecipe(null);
-    setIsStreaming(true);
-    try {
-      const input: BargainChefInput = { craving };
-      // streamFlow's generics are <FinalOutput, StreamChunk>.
-      const result = streamFlow<Recipe, PartialRecipe>({
-        url: '/api/bargainChefFlow',
-        input,
-      });
-      for await (const partial of result.stream) {
-        setRecipe(partial);
-      }
-      await result.output;
-    } catch (err) {
-      console.error('Failed to generate recipe', err);
-    } finally {
-      setIsStreaming(false);
-    }
+export default function WebViewScreen() {
+  const webviewRef = useRef<WebView>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const handleReload = () => {
+    setError(false);
+    setLoading(true);
+    webviewRef.current?.reload();
+  };
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <WifiOff color={COLORS.neutral[400]} size={64} strokeWidth={1.5} />
+        <Text style={styles.errorTitle}>تعذر تحميل الموقع</Text>
+        <Text style={styles.errorMessage}>
+          تحقق من اتصالك بالإنترنت وحاول مرة أخرى
+        </Text>
+        <Pressable style={styles.retryButton} onPress={handleReload}>
+          <Text style={styles.retryText}>إعادة المحاولة</Text>
+        </Pressable>
+      </View>
+    );
   }
 
   return (
-    <main>
-      <h1>Bargain Chef</h1>
-      <p className="tagline">
-        Tell me what you feel like eating and I&apos;ll suggest a recipe built
-        around today&apos;s grocery deals.
-      </p>
-
-      <form className="prompt" onSubmit={generateRecipe}>
-        <input
-          type="text"
-          value={craving}
-          onChange={(e) => setCraving(e.target.value)}
-          name="craving"
-          placeholder="What are you in the mood for?"
-          disabled={isStreaming}
-        />
-        <button type="submit" disabled={isStreaming}>
-          {isStreaming ? 'Cooking…' : 'Suggest a recipe'}
-        </button>
-      </form>
-
-      {recipe && (
-        <article>
-          {recipe.title && <h2>{recipe.title}</h2>}
-          {recipe.description && (
-            <p className="description">{recipe.description}</p>
-          )}
-          {recipe.servings && (
-            <p className="serves">
-              <strong>Serves:</strong> {recipe.servings}
-            </p>
-          )}
-
-          {recipe.ingredients && recipe.ingredients.length > 0 && (
-            <>
-              <h3>Ingredients</h3>
-              <ul className="ingredients">
-                {recipe.ingredients.map((ing, i) => (
-                  <li key={i}>
-                    {ing.quantity} {ing.name}
-                    {ing.onSale && <span className="badge">on sale</span>}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          {recipe.steps && recipe.steps.length > 0 && (
-            <>
-              <h3>Steps</h3>
-              <ol className="steps">
-                {recipe.steps.map((step, i) => (
-                  <li key={i}>{step}</li>
-                ))}
-              </ol>
-            </>
-          )}
-        </article>
+    <View style={styles.container}>
+      <WebView
+        ref={webviewRef}
+        source={{ uri: SITE_URL }}
+        style={styles.webview}
+        onLoadStart={() => setLoading(true)}
+        onLoadEnd={() => setLoading(false)}
+        onError={() => {
+          setError(true);
+          setLoading(false);
+        }}
+        javaScriptEnabled
+        domStorageEnabled
+      />
+      {loading && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color={COLORS.primary[600]} />
+        </View>
       )}
-    </main>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.neutral[0],
+  },
+  webview: {
+    flex: 1,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.neutral[0],
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+    backgroundColor: COLORS.neutral[50],
+  },
+  errorTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 20,
+    color: COLORS.neutral[800],
+    marginTop: SPACING.lg,
+  },
+  errorMessage: {
+    fontFamily: FONTS.regular,
+    fontSize: 15,
+    color: COLORS.neutral[500],
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+  },
+  retryButton: {
+    marginTop: SPACING.xl,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.primary[600],
+    borderRadius: 999,
+  },
+  retryText: {
+    fontFamily: FONTS.bold,
+    fontSize: 15,
+    color: COLORS.neutral[0],
+  },
+});
